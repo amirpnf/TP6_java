@@ -260,7 +260,7 @@ We are going to overload the two methods we defined in the previous question, th
 
 Here are they :
 ```java
-public void save(Path path) throws IOException{  // This is the overloading saving method
+public void save(Path path) throws IOException{  // This is the overloaded saving method
 	save(path, StandardCharsets.UTF_8);
 }
 	
@@ -273,7 +273,7 @@ public void save(Path path, Charset charset) throws IOException{
 		} 
 }
 
-public void load(Path path) throws IOException{ // This is the Overloaded loading method
+public void load(Path path) throws IOException{ // This is the overloaded loading method
 	load(path, StandardCharsets.UTF_8);
 }
 
