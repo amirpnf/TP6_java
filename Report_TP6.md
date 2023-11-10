@@ -148,6 +148,7 @@ public sealed interface Article permits LaserDisc, VideoTape {
 ```
 So we define `fromText` in the interface.
 Here's the modified implementation of `toText` in VideoTape:
+
 ```java
 import java.time.Duration;
 import java.util.Objects;
@@ -203,4 +204,162 @@ Comme Catalog est mutable, on va écrire la méthode load comme une méthode d'i
 Note : pour load, on ne vous demande pas de vérifier au préalable que le fichier est bien formé (lignes de la bonne taille, formats numériques corrects, ...). Vous pouvez laisser filer les exceptions susceptibles de survenir dans ces cas là.   
 
 **Answer** :
- 
+- In order to create a writer on a file using a `Path` given as a parameter of our function,
+we can use the `newBufferedWriter` from `Files` class. This method takes a `Path` object and
+a `Charset` (if not given, **UTF-8**), and returns a `Writer` object that we can assign to
+a variable.   
+- In Java, in order to ensure that system resources associated with an object are properly released,
+we should implement resource management practices and mechanisms, specifically using a `try-with-resources`
+statement.
+- To manage the input/output errors when using `save` and `load` methods, we can insert this statement in front of 
+our functions signatures :  
+function () `throws IOException` {...}  
+
+Here's the `save` method implementation (in the `Catalog` class) :
+```java
+public void save(Path path) throws IOException{
+  try(var writer = Files.newBufferedWriter(path)) {
+  	for(var article : articles.values()) {
+  	  writer.write(article.toText());
+  	  writer.newLine();
+  	}
+  } 
+}
+```  
+And the `load` method, we'd rather have this one as an instance method, this will allow us to directly modify
+the state of the current `Catalog` object, and to load `Article` objects directly in the existing `Catalog`.
+```java
+public void load(Path path) throws IOException{
+  try(var reader = Files.newBufferedReader(path)) {
+  	String line;
+  	while((line = reader.readLine()) != null) {
+  	  var article = Article.fromText(line);
+  	  this.add(article);
+  	}
+  }
+  }
+```
+
+5. Tout le monde s'est plus ou moins mis d'accord pour que l'UTF-8 soit le format utilisé pour la stockage, malheureusement, il reste encore plein de Windows XP / Windows 7 qui ne sont pas en UTF8 par défaut. On va donc ajouter deux surcharges à load et save qui prennent en paramètre l'encoding. Le code suivant doit fonctionner :
+```java
+var catalog4 = new Catalog();
+catalog4.add(new LaserDisc("A Fistful of €"));
+catalog4.add(new VideoTape("For a Few €s More", Duration.ofMinutes(132)));
+catalog4.save(Path.of("catalog-windows-1252.txt"), Charset.forName("Windows-1252"));
+var catalog5 = new Catalog();
+catalog5.load(Path.of("catalog-windows-1252.txt"), Charset.forName("Windows-1252"));
+System.out.println(catalog5.lookup("A Fistful of €"));
+System.out.println(catalog5.lookup("For a Few €s More"));
+```    
+Écrire les deux méthodes et partager le code entre les surcharges pour ne pas dupliquer de code.
+Note : il existe une classe StandardCharsets qui est une énumération des encodages standard et qui contient l'encodage UTF-8. 
+
+**Answer** : 
+We are going to overload the two methods we defined in the previous question, that will allow us to load and save 
+`Article` objects into a `Catalog`, which have non-UTF-8 names. 
+
+Here are they :
+```java
+public void save(Path path) throws IOException{  // This is the overloading saving method
+	save(path, StandardCharsets.UTF_8);
+}
+	
+public void save(Path path, Charset charset) throws IOException{
+	try(var writer = Files.newBufferedWriter(path, charset)) {
+		for(var article : articles.values()) {
+			writer.write(article.toText());
+			writer.newLine();
+			}
+		} 
+}
+
+public void load(Path path) throws IOException{ // This is the Overloaded loading method
+	load(path, StandardCharsets.UTF_8);
+}
+
+public void load(Path path, Charset charset) throws IOException{
+	try(var reader = Files.newBufferedReader(path, charset)) {
+		String line;
+		while((line = reader.readLine()) != null) {
+			var article = Article.fromText(line);
+			this.add(article);
+		}
+	}
+}
+```
+
+6. De façon optionnelle, pour les plus balèzes, on veut ajouter le support des fichiers binaires en ajoutant deux méthodes saveInBinary et loadInBinary qui permettent respectivement de sauver un fichier en binaire et de charger un fichier binaire.
+Le format binaire utilisé est
+
+    un entier 32 bits indiquant le nombre d'articles,
+    pour chaque article, son type, un entier 8 bits (1 pour VideoTape, 2 pour LaserDisc), son nom en modified UTF8 et dans le cas de VideoTape un entier long 64 bits avec le nombre de minutes.
+
+
+Il existe des classes DataInputStream et DataOutputStream que l'on peut construire respectivement sur InputStream et OutputStream et qui sont capables de lire/écrire un entier 8 bits, un entier 64 bits ou une chaîne au format modified UTF8.
+Écrire les méthodes saveInBinary et loadInBinary et vérifier que le code suivant fonctionne.
+```java
+var catalog6 = new Catalog();
+catalog6.add(new VideoTape("Back to the future", Duration.ofMinutes(116)));
+catalog6.add(new LaserDisc("Back to the future part II"));
+catalog6.add(new LaserDisc("Back to the future part III"));
+catalog6.saveInBinary(Path.of("catalog.binary"));
+var catalog7 = new Catalog();
+catalog7.loadFromBinary(Path.of("catalog.binary"));
+System.out.println(catalog7.lookup("Back to the future"));
+System.out.println(catalog7.lookup("Back to the future part II"));
+System.out.println(catalog7.lookup("Back to the future part III"));
+```    
+
+**Anwser** :
+
+Here are two methods for saving a Catalog to and loading it from a binary file :
+
+```java
+public void saveToBinary(Path path) throws IOException {
+  try(var writer = new DataOutputStream(new FileOutputStream(path.toFile()))) {
+  	writer.writeInt(articles.size());
+  	for(var item : articles.values()) {
+  	  if(item.isVideoTape()) { // verifying that it's a VideoTape
+  	  	writer.writeByte(1);
+  	  	writer.writeUTF(item.name());
+  	  	writer.writeLong(item.duration().toMinutes()); // Then call duration on it. (for more information, read the P.S below)
+  	  } else {
+  	  	writer.writeByte(2);
+  	  	writer.writeUTF(item.name());
+  	  }
+  	}
+  }
+}
+
+public void loadFromBinary(Path path) throws IOException {
+  try(var reader = new DataInputStream(new FileInputStream(path.toFile()))) {
+  	int itemsNumber = reader.readInt();
+  	for(int i = 0; i < itemsNumber; ++i) {
+  	  int itemType = reader.readByte();
+  	  String itemName = reader.readUTF();
+  	  switch(itemType) {
+  	  	case 1 -> {
+  	  	  long duration = reader.readLong();
+  	  	  var tape = new VideoTape(itemName, Duration.ofMinutes(duration));
+  	  	  this.add(tape);
+  	  	} 
+  	  	case 2 -> {
+  	  	  var disk = new LaserDisc(itemName);
+  	  	  this.add(disk);
+  	  	}
+  	  	default -> throw new IllegalArgumentException("Invalid Article Type!");
+  	  }
+  	}
+  }
+}
+```
+P.S : In the `saveToBinary` method, when we want to write the duration of a VideoTape, the object on 
+which we call `.duration` is an `Article` and not a VideoTape, so that would be a problem unless we add this
+method to our interface : 
+```java
+default Duration duration() {
+  throw new UnsupportedOperationException("Unsupported operation for this type of article");
+}
+```
+This will ensure that any object from a class implementing the `Article` interface, upon which the `.duration()` method is invoked, will throw an `UnsupportedOperationException` if `.duration()` is not implemented in its class. So for example if a this
+method is called on a `LaserDisc`, it'll throw an `UnsupportedOperationException`. 
