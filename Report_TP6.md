@@ -18,7 +18,7 @@ var videoTape2 = new VideoTape("Mission Impossible", Duration.ofMinutes(110));
 ```
 Attention à ne pas oublier les pré-conditions. 
 
-**Answer** : Here's the defines records `LaserDisc` and `VideoTape` :
+**Answer** : Here's the defined records `LaserDisc` and `VideoTape` :
 VideoTape:
 
 ```java
